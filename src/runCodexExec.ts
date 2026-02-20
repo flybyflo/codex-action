@@ -145,9 +145,7 @@ export async function runCodexExec({
     command.push("--config", `model_reasoning_effort="${effort}"`);
   }
 
-  if (webSearch === "live") {
-    command.push("--search");
-  } else if (webSearch != null) {
+  if (webSearch != null) {
     command.push("--config", `web_search="${webSearch}"`);
   }
 
