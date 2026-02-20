@@ -11,6 +11,7 @@ import {
   PromptSource,
   runCodexExec,
   SafetyStrategy,
+  WebSearchMode,
 } from "./runCodexExec";
 import { dropSudo } from "./dropSudo";
 import { ensureActorHasWriteAccess } from "./checkActorPermissions";
@@ -135,6 +136,10 @@ export async function main() {
       parseExtraArgs
     )
     .requiredOption(
+      "--web-search <mode>",
+      "Web search mode. One of 'cached', 'live', or 'disabled'."
+    )
+    .requiredOption(
       "--output-file <FILE>",
       "Path where the final message from `codex exec` will be written."
     )
@@ -167,6 +172,7 @@ export async function main() {
         codexHome: string;
         cd: string;
         extraArgs: Array<string>;
+        webSearch: string;
         outputFile: string;
         outputSchemaFile: string;
         outputSchema: string;
@@ -183,6 +189,7 @@ export async function main() {
           codexHome,
           cd,
           extraArgs,
+          webSearch,
           outputSchema,
           outputSchemaFile,
           sandbox,
@@ -248,6 +255,7 @@ export async function main() {
           sandbox: toSandboxMode(sandbox),
           model: emptyAsNull(model),
           effort: emptyAsNull(effort),
+          webSearch: toWebSearchMode(webSearch),
           safetyStrategy: toSafetyStrategy(safetyStrategy),
           codexUser: emptyAsNull(codexUser),
         });
@@ -342,6 +350,24 @@ function toSandboxMode(value: string): SandboxMode {
     default:
       throw new Error(
         `Invalid sandbox: ${value}. Must be one of 'read-only', 'workspace-write', or 'danger-full-access'.`
+      );
+  }
+}
+
+function toWebSearchMode(value: string): WebSearchMode | null {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  switch (normalized) {
+    case "cached":
+    case "live":
+    case "disabled":
+      return normalized;
+    default:
+      throw new Error(
+        `Invalid web-search mode: ${value}. Must be one of 'cached', 'live', or 'disabled'.`
       );
   }
 }

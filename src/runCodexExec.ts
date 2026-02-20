@@ -26,6 +26,8 @@ export type SandboxMode =
   | "workspace-write"
   | "danger-full-access";
 
+export type WebSearchMode = "cached" | "live" | "disabled";
+
 export type OutputSchemaSource =
   | {
       type: "file";
@@ -45,6 +47,7 @@ export async function runCodexExec({
   outputSchema,
   model,
   effort,
+  webSearch,
   safetyStrategy,
   codexUser,
   sandbox,
@@ -57,6 +60,7 @@ export async function runCodexExec({
   outputSchema: OutputSchemaSource | null;
   model: string | null;
   effort: string | null;
+  webSearch: WebSearchMode | null;
   safetyStrategy: SafetyStrategy;
   codexUser: string | null;
   sandbox: SandboxMode;
@@ -139,6 +143,12 @@ export async function runCodexExec({
     // https://github.com/openai/codex/blob/00debb6399eb51c4b9273f0bc012912c42fe6c91/docs/config.md#config
     // https://github.com/openai/codex/blob/00debb6399eb51c4b9273f0bc012912c42fe6c91/docs/config.md#model_reasoning_effort
     command.push("--config", `model_reasoning_effort="${effort}"`);
+  }
+
+  if (webSearch === "live") {
+    command.push("--search");
+  } else if (webSearch != null) {
+    command.push("--config", `web_search="${webSearch}"`);
   }
 
   command.push(...extraArgs);

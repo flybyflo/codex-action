@@ -18,6 +18,10 @@ inputs:
     description: "OpenAI API key used by Codex."
     required: false
     default: ""
+  chatgpt-auth-json:
+    description: "Optional serialized contents of ~/.codex/auth.json to authenticate Codex with a ChatGPT subscription. Store this value in `secrets`."
+    required: false
+    default: ""
   responses-api-endpoint:
     description: "Optional Responses API endpoint override, e.g. https://example.openai.azure.com/openai/v1/responses. Defaults to the proxy's built-in endpoint when empty."
     required: false
@@ -37,6 +41,10 @@ inputs:
     default: ""
   codex-args:
     description: "Additional args to pass through to `codex exec`. If this value starts with `[`, it will be parsed as a JSON array; otherwise, it will be parsed as a shell-like string."
+    required: false
+    default: ""
+  web-search:
+    description: "Web search mode for Codex: `cached`, `live`, or `disabled`. Leave empty to use Codex defaults."
     required: false
     default: ""
   output-schema:
@@ -130,6 +138,23 @@ runs:
           --allow-bots "${{ inputs['allow-bots'] }}" \
           --allow-users "${{ inputs['allow-users'] }}"
 
+    - name: Validate authentication and web-search inputs
+      shell: bash
+      run: |
+        if [ -n "${{ inputs['openai-api-key'] }}" ] && [ -n "${{ inputs['chatgpt-auth-json'] }}" ]; then
+          echo "Specify only one of 'openai-api-key' or 'chatgpt-auth-json'." >&2
+          exit 1
+        fi
+
+        case "${{ inputs['web-search'] }}" in
+          ""|cached|live|disabled)
+            ;;
+          *)
+            echo "Invalid web-search mode: '${{ inputs['web-search'] }}'. Must be one of: cached, live, disabled." >&2
+            exit 1
+            ;;
+        esac
+
     - name: Install Codex CLI
       shell: bash
       run: npm install -g "@openai/codex@${{ inputs['codex-version'] }}"
@@ -148,6 +173,32 @@ runs:
           --codex-user "${{ inputs['codex-user'] }}" \
           --github-run-id "${{ github.run_id }}"
 
+    - name: Install ChatGPT auth cache
+      if: ${{ inputs['chatgpt-auth-json'] != '' }}
+      env:
+        CHATGPT_AUTH_JSON: ${{ inputs['chatgpt-auth-json'] }}
+      shell: bash
+      run: |
+        auth_file="${{ steps.resolve_home.outputs.codex-home }}/auth.json"
+
+        if [ "${{ inputs['safety-strategy'] }}" = "unprivileged-user" ]; then
+          codex_user="${{ inputs['codex-user'] }}"
+          if [ -z "$codex_user" ]; then
+            echo "inputs['codex-user'] must be provided when safety-strategy is 'unprivileged-user'." >&2
+            exit 1
+          fi
+
+          sudo -u "$codex_user" -- mkdir -p "$(dirname "$auth_file")"
+          printf '%s' "$CHATGPT_AUTH_JSON" | sudo -u "$codex_user" -- tee "$auth_file" >/dev/null
+          sudo chmod 600 "$auth_file"
+        else
+          mkdir -p "$(dirname "$auth_file")"
+          printf '%s' "$CHATGPT_AUTH_JSON" > "$auth_file"
+          if [ "${RUNNER_OS}" != "Windows" ]; then
+            chmod 600 "$auth_file"
+          fi
+        fi
+
     - name: Determine server info path
       id: derive_server_info
       shell: bash
@@ -157,7 +208,6 @@ runs:
 
     - name: Check Responses API proxy status
       id: start_proxy
-      if: ${{ inputs['openai-api-key'] != '' }}
       shell: bash
       run: |
         server_info_file="${{ steps.derive_server_info.outputs.server_info_file }}"
@@ -218,7 +268,7 @@ runs:
     # This step has an output named `port`.
     - name: Read server info
       id: read_server_info
-      if: ${{ inputs['openai-api-key'] != '' || inputs.prompt != '' || inputs['prompt-file'] != '' }}
+      if: ${{ steps.start_proxy.outputs.server_info_file_exists == 'true' }}
       shell: bash
       run: node "${{ github.action_path }}/dist/main.js" read-server-info "${{ steps.derive_server_info.outputs.server_info_file }}"
 
@@ -232,7 +282,7 @@ runs:
           --safety-strategy "${{ inputs['safety-strategy'] }}"
 
     - name: Drop sudo privilege, if appropriate
-      if: ${{ inputs['safety-strategy'] == 'drop-sudo' && inputs['openai-api-key'] != '' }}
+      if: ${{ inputs['safety-strategy'] == 'drop-sudo' && (inputs.prompt != '' || inputs['prompt-file'] != '') }}
       shell: bash
       run: |
         case "${RUNNER_OS}" in
@@ -249,7 +299,7 @@ runs:
         esac
 
     - name: Verify sudo privilege removed
-      if: ${{ inputs['safety-strategy'] == 'drop-sudo' && inputs['openai-api-key'] != '' }}
+      if: ${{ inputs['safety-strategy'] == 'drop-sudo' && (inputs.prompt != '' || inputs['prompt-file'] != '') }}
       shell: bash
       run: |
         if sudo -n true 2>/dev/null; then
@@ -269,6 +319,7 @@ runs:
         CODEX_WORKING_DIRECTORY: ${{ inputs['working-directory'] || github.workspace }}
         CODEX_SANDBOX: ${{ inputs.sandbox }}
         CODEX_ARGS: ${{ inputs['codex-args'] }}
+        CODEX_WEB_SEARCH: ${{ inputs['web-search'] }}
         CODEX_OUTPUT_SCHEMA: ${{ inputs['output-schema'] }}
         CODEX_OUTPUT_SCHEMA_FILE: ${{ inputs['output-schema-file'] }}
         CODEX_MODEL: ${{ inputs.model }}
@@ -285,6 +336,7 @@ runs:
             --codex-home "$CODEX_HOME" \
             --cd "$CODEX_WORKING_DIRECTORY" \
             --extra-args "$CODEX_ARGS" \
+            --web-search "$CODEX_WEB_SEARCH" \
             --output-schema "$CODEX_OUTPUT_SCHEMA" \
             --output-schema-file "$CODEX_OUTPUT_SCHEMA_FILE" \
             --sandbox "$CODEX_SANDBOX" \

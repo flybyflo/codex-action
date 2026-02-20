@@ -93,6 +93,7 @@ jobs:
 | Name                     | Description                                                                                                                                    | Default     |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | `openai-api-key`         | Secret used to start the Responses API proxy when you are using OpenAI (default). Store it in `secrets`.                                       | `""`        |
+| `chatgpt-auth-json`      | Optional serialized `~/.codex/auth.json` for ChatGPT subscription authentication. Mutually exclusive with `openai-api-key`.                  | `""`        |
 | `responses-api-endpoint` | Optional Responses API endpoint override, e.g. `https://example.openai.azure.com/openai/v1/responses`. Leave empty to use the proxy's default. | `""`        |
 | `prompt`                 | Inline prompt text. Provide this or `prompt-file`.                                                                                             | `""`        |
 | `prompt-file`            | Path (relative to the repository root) of a file that contains the prompt. Provide this or `prompt`.                                           | `""`        |
@@ -101,6 +102,7 @@ jobs:
 | `sandbox`                | Sandbox mode for Codex. One of `workspace-write` (default), `read-only` or `danger-full-access`.                                               | `""`        |
 | `codex-version`          | Version of `@openai/codex` to install.                                                                                                         | `""`        |
 | `codex-args`             | Extra arguments forwarded to `codex exec`. Accepts JSON arrays (`["--flag", "value"]`) or shell-style strings.                                 | `""`        |
+| `web-search`             | Optional web search mode override. One of `cached`, `live`, or `disabled`.                                                                     | `""`        |
 | `output-schema`          | Inline schema contents written to a temp file and passed to `codex exec --output-schema`. Mutually exclusive with `output-schema-file`.        | `""`        |
 | `output-schema-file`     | Schema file forwarded to `codex exec --output-schema`. Leave empty to skip passing the option.                                                 | `""`        |
 | `model`                  | Model the agent should use. Leave empty to let Codex pick its default.                                                                         | `""`        |
@@ -147,6 +149,8 @@ jobs:
 
 - Run this action after `actions/checkout@v5` so Codex has access to your repository contents.
 - To use a non-default Responses endpoint (for example Azure OpenAI), set `responses-api-endpoint` to the provider's URL while keeping `openai-api-key` populated; the proxy will still send `Authorization: Bearer <key>` upstream.
+- To authenticate with a ChatGPT subscription in CI, set `chatgpt-auth-json` to a secret containing the contents of `~/.codex/auth.json` from a logged-in machine.
+- To control Codex web search behavior, use `web-search: cached`, `web-search: live`, or `web-search: disabled`.
 - If you want Codex to have access to a narrow set of privileged functionality, consider running a local MCP server that can perform these actions and configure Codex to use it.
 - If you need more control over the CLI invocation, pass flags through `codex-args` or create a `config.toml` in `codex-home`.
 - Once `openai/codex-action` is run once with `openai-api-key`, you can also call `codex` from subsequent scripts in your job. (You can omit `prompt` and `prompt-file` from the action in this case.)
